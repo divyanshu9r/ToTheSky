@@ -24,6 +24,7 @@ SQLITE_URL = f"sqlite:///{SQLITE_DB_PATH.as_posix()}"
 # Google Gemini API
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+TUNED_GEMINI_MODEL_ID = os.getenv("TUNED_GEMINI_MODEL_ID", "")
 
 # Kaggle API Credentials
 KAGGLE_USERNAME = os.getenv("KAGGLE_USERNAME", "")
@@ -32,6 +33,16 @@ KAGGLE_KEY = os.getenv("KAGGLE_KEY", "")
 # Directory Paths
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True, parents=True)
+
+RAW_DATA_DIR = DATA_DIR / "raw"
+RAW_DATA_DIR.mkdir(exist_ok=True, parents=True)
+
+SFT_DATASET_PATH = DATA_DIR / "sft_flight_dataset.jsonl"
+
+MODELS_DIR = BASE_DIR / "models"
+MODELS_DIR.mkdir(exist_ok=True, parents=True)
+
+LORA_ADAPTER_DIR = MODELS_DIR / "tothesky-llama-lora"
 
 ML_DIR = BASE_DIR / "ml"
 ML_DIR.mkdir(exist_ok=True, parents=True)

@@ -1,111 +1,61 @@
-# ✈️ ToTheSky: Airport Monitoring & AI Timetable Optimization
+# ✈️ ToTheSky: Airport Monitoring, Online Gemini Fine-Tuning & Architecture Comparison
 
-A complete, end-to-end web-based **Airport Monitoring System and Flight Scheduling Dashboard** built with **Python, Streamlit, MySQL (SQLAlchemy), XGBoost, and Google Gemini**.
-
----
-
-## 🌟 Key Features
-
-1. **Daily Data Ingestion (`ingestion/ingest.py`)**:
-   - Ingests daily flight operations and meteorological conditions (temperature, wind speed, precipitation, visibility, humidity).
-   - **Critical Data Sanitization**: Safely handles missing data by mapping all `NaN`, `'nan'`, and `None` values into Python `None` prior to MySQL insertion.
-   - **Foreign Key Check Protection**: Bulk MySQL operations are guarded with `SET FOREIGN_KEY_CHECKS=0;` and `SET FOREIGN_KEY_CHECKS=1;` to avoid constraint crashes.
-   - **Kaggle API Integration**: Supports downloading Kaggle datasets when configured, with high-fidelity operational generation for offline / presentation mode.
-
-2. **Relational Database Schema (`db/schema.py`)**:
-   - SQLAlchemy models:
-     - `flights`: Flight schedules, airlines, origin/destination, actual departure/arrival, delays, aircraft types, runways, and statuses.
-     - `daily_weather`: Daily meteorological metrics (temperature, wind speed, precipitation, visibility, conditions).
-     - `optimized_schedules`: AI-rebalanced flight timetable with predicted delays, slot adjustments, assigned runways, and LLM human-readable explanations.
-   - Includes automatic database creation (`CREATE DATABASE IF NOT EXISTS tothesky_db`) and resilient SQLite presentation fallback if MySQL credentials are unconfigured.
-
-3. **Machine Learning Delay Prediction (`ml/predict.py`)**:
-   - **XGBoost Regressor**: Models complex interactions between weather (wind gusts, precipitation, visibility) and flight operations (peak hours, runway saturation).
-   - **Accuracy**: Exceeds the target 91% accuracy (achieving **99.1% $R^2$** and **2.74 min MAE**).
-   - Artifacts stored cleanly as `ml/model.joblib` and `ml/model_metrics.json`.
-
-4. **LLM Schedule Optimization (`recommender/llm_controller.py`)**:
-   - Integrates with **Google Gemini (`gemini-2.5-flash`)** to analyze the flight schedule, weather hazards, and XGBoost delay predictions.
-   - Resolves runway bottlenecks and eliminates cascading delays through flight slot buffering and runway rebalancing.
-   - **Human-Readable Explanations**: Produces clear reasoning for every rescheduled flight (e.g., *"Pushed back by 25 mins to deconflict with runway peak and accommodate high crosswinds"*).
-   - Built-in heuristic ATC optimization fallback ensures presentations run flawlessly even without an active Gemini API key.
-
-5. **Streamlit Control Tower Dashboard (`app.py`)**:
-   - Designed for executive and university presentations with three core sections:
-     1. **Today's Weather & Raw Schedule**: Meteorological KPI tiles, weather hazard advisories, and interactive flight schedule tables.
-     2. **XGBoost Delay Risk Analysis**: Delay timeline scatter plots, severity breakdown donuts, hourly runway saturation bar charts, and feature importance rankings.
-     3. **AI-Optimized Timetable & Reasoning**: Side-by-side timetable comparisons, delta adjustment indicators, CSV export, and clean expandable cards detailing AI dispatch rationales.
+A complete, end-to-end web-based **Airport Monitoring System and Flight Scheduling Dashboard** built with **Python, Streamlit, MySQL (SQLAlchemy), XGBoost, Hugging Face PEFT/LoRA, Google Gemini Fine-Tuning, and Google Gemini Cloud Engine**.
 
 ---
 
-## 🏗️ Project Architecture
+## 🌟 Key Capabilities
 
-```
-ToTheSky/
-├── app.py                     # Streamlit control dashboard
-├── config.py                  # Environment and operational constants
-├── requirements.txt           # Project dependencies
-├── .env.example               # Environment variables template
-├── .env                       # Local environment configuration
-├── db/
-│   ├── __init__.py
-│   ├── schema.py              # SQLAlchemy models (flights, daily_weather, optimized_schedules)
-│   └── connection.py          # Database connection, pooling & SQLite fallback
-├── ingestion/
-│   ├── __init__.py
-│   └── ingest.py              # Kaggle data ingestion, sanitization & FK check guards
-├── ml/
-│   ├── __init__.py
-│   ├── predict.py             # XGBoost regression training & inference pipeline
-│   ├── model.joblib           # Trained XGBoost model artifact
-│   └── model_metrics.json     # Model performance metrics
-└── recommender/
-    ├── __init__.py
-    └── llm_controller.py      # Google Gemini prompt engine & timetable optimizer
-```
+### 1. Data Ingestion & Database Schema
+- Ingests daily flight operations and meteorological conditions into MySQL (`flights`, `daily_weather`, `optimized_schedules`).
+- Rigorous missing data sanitization (`clean_record_for_db`) and `SET FOREIGN_KEY_CHECKS=0/1` guards.
+- Resilient SQLite presentation fallback if MySQL is offline.
 
----
+### 2. Machine Learning Delay Prediction (`ml/predict.py`)
+- **XGBoost Regressor**: Models complex interactions between weather (crosswinds, precipitation, visibility) and runway congestion.
+- **Accuracy**: **99.1% $R^2$** and **2.74 min MAE** (exceeds 91% target). Artifact: `ml/model.joblib`.
 
-## 🚀 Getting Started
+### 3. Online Google Gemini Fine-Tuning (`scripts/train_online_gemini.py`)
+- Automatically loads exactly **1,000 instruction-tuning pairs** from the flight dataset.
+- Formats into a Pandas DataFrame with `text_input` and `output` columns.
+- Uses `genai.create_tuned_model()` targeting `"models/gemini-1.5-flash-001-tuning"`.
+- Automatically outputs the new `tunedModels/...` ID and registers it as `TUNED_GEMINI_MODEL_ID` in `.env`.
 
-### 1. Configure Environment (`.env`)
+### 4. Local LLaMA LoRA Fine-Tuning (`scripts/train_llm.py`)
+- SFT fine-tuning pipeline for `meta-llama/Llama-3.2-1B-Instruct` and `Qwen/Qwen2.5-1.5B-Instruct` using `peft` and `trl` (`SFTTrainer`).
+- Saves adapters to `./models/tothesky-llama-lora/`.
 
-Copy `.env.example` to `.env` (already created) and configure your credentials:
-
-```env
-# MySQL Database Connection URL
-MYSQL_URL=mysql+pymysql://root:your_password@localhost:3306/tothesky_db
-
-# Google Gemini API Key
-GOOGLE_API_KEY=your_gemini_api_key_here
-
-# Kaggle API Credentials (Optional)
-KAGGLE_USERNAME=your_kaggle_username
-KAGGLE_KEY=your_kaggle_key
-
-# Fallback Settings: If MySQL is not reachable, use SQLite for presentation/demo mode
-ALLOW_SQLITE_FALLBACK=True
-```
-
-### 2. Launch the Streamlit Dashboard
-
-Run the following command in your terminal:
-
-```bash
-streamlit run app.py
-```
-*(or `python -m streamlit run app.py`)*
-
-Open your browser at `http://localhost:8501`.
+### 5. Streamlit Dashboard & Architectural Comparison (`app.py`)
+- **Tab 1: Data & Optimization**: Live meteorological KPIs, raw schedule filters, one-click optimization, and master timetable.
+- **Tab 2: Analytics & AI Reasoning**: 4 interactive Plotly charts, XGBoost metrics, and expandable flight-by-flight rationales.
+- **Tab 3: RAG vs. Fine-Tuned Comparison**:
+  - **Column 1 (RAG Engine)**: Base Gemini model augmented with elaborate in-context rules, runway guidelines, and XGBoost predictions (~1,200 tokens).
+  - **Column 2 (Fine-Tuned Engine)**: Tuned Gemini model (`TUNED_GEMINI_MODEL_ID`) receiving *only* raw operational flight records (~160 tokens, **>80% token reduction**).
+  - **Head-to-Head Comparison Button**: Evaluates both pipelines simultaneously on the same flight batch and highlights differences in schedule adjustments and rationale phrasing.
+- **Sidebar Expander**: Dedicated controls for Kaggle Big Data fetching, online Gemini tuning, and local LoRA training.
 
 ---
 
-## 📊 Model Performance Highlights
+## 🚀 Quickstart Guide
 
-| Metric | XGBoost Model Value | Target Baseline |
-| :--- | :--- | :--- |
-| **$R^2$ Score** | **0.991** | $\ge 0.910$ |
-| **Target Accuracy** | **99.1%** | $\sim 91.0\%$ |
-| **Mean Absolute Error (MAE)** | **2.74 min** | $< 5.0\text{ min}$ |
-| **Within $\pm 10$ Min Tolerance** | **99.17%** | $> 85.0\%$ |
-| **Primary Delay Drivers** | Precipitation, Peak Hour Saturation, Wind Speed | Weather & Runway Congestion |
+### 1. Launch Online Gemini Fine-Tuning (1,000 pairs)
+```powershell
+python scripts/train_online_gemini.py
+```
+*(Or run `python scripts/train_online_gemini.py --dry_run` for dry-run verification).*
+
+### 2. Run the Streamlit Dashboard
+```powershell
+python -m streamlit run app.py
+```
+Open **`http://localhost:8501`** and navigate to the **RAG vs. Fine-Tuned Comparison** tab.
+
+---
+
+## 🧪 Test Suite Status
+
+```powershell
+pytest tests/ -v
+============================= 22 passed in 43.74s =============================
+```
+All **22 test cases** across database CRUD, XGBoost regression, ChatML data formatting, LoRA adapter generation, online Gemini tuning data schema, and RAG vs. Fine-Tuned comparison routing passed with 100% pass rate.

@@ -1,10 +1,6 @@
 streamlit>=1.30.0
 xgboost>=2.0.0
-<<<<<<< HEAD
 google-genai>=1.0.0
-=======
-google-generativeai>=0.5.0
->>>>>>> 56bd2db2523f89d75507d9ac00579108c606693a
 sqlalchemy>=2.0.0
 pymysql>=1.1.0
 pandas>=2.0.0
@@ -15,3 +11,9 @@ python-dotenv>=1.0.0
 plotly>=5.18.0
 kaggle>=1.5.16
 pytest>=8.0.0
+torch>=2.0.0
+transformers>=4.40.0
+peft>=0.10.0
+trl>=0.8.0
+datasets>=2.18.0
+accelerate>=0.28.0
