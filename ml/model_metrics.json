@@ -1,0 +1,25 @@
+{
+  "r2_score": 0.9877,
+  "target_accuracy_pct": 98.77,
+  "mae_minutes": 3.12,
+  "rmse_minutes": 4.13,
+  "within_10min_accuracy_pct": 97.8,
+  "within_5min_accuracy_pct": 81.6,
+  "training_samples": 2000,
+  "test_samples": 500,
+  "feature_importances": {
+    "is_peak_hour": 0.3731,
+    "humidity_pct": 0.2269,
+    "precipitation_mm": 0.2158,
+    "wind_speed_kmh": 0.0752,
+    "runway_congestion_factor": 0.0591,
+    "visibility_km": 0.0343,
+    "departure_hour": 0.0105,
+    "airline_code": 0.0014,
+    "scheduled_duration_min": 0.0009,
+    "temperature_c": 0.0008,
+    "departure_minute": 0.0008,
+    "day_of_week": 0.0007,
+    "destination_code": 0.0006
+  }
+}
