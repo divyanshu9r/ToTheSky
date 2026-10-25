@@ -51,10 +51,9 @@ st.set_page_config(
     page_title="ToTheSky | Airport Monitoring & AI Timetable Optimization",
     page_icon="✈️",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-# Custom Styling for Clean Dashboard
 st.markdown(
     """
     <style>
@@ -71,20 +70,6 @@ st.markdown(
     }
     [data-baseweb="tab"] button {
         font-size: 0.95rem;
-        font-weight: 600;
-    }
-    .metric-container {
-        background-color: #F8FAFC;
-        border: 1px solid #E2E8F0;
-        border-radius: 8px;
-        padding: 12px 16px;
-        margin-bottom: 12px;
-    }
-    .engine-pill {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 0.8rem;
         font-weight: 600;
     }
     </style>
@@ -132,167 +117,12 @@ def load_day_data(selected_date: date):
 
 
 # -----------------------------------------------------------------------------
-# Sidebar: Controls & System Telemetry
-# -----------------------------------------------------------------------------
-with st.sidebar:
-    # 1. Clean typography logo
-    st.markdown("## ✈️ **ToTheSky**")
-    st.caption("Airport Monitoring & AI Scheduling")
-    st.markdown("---")
-    st.markdown("### 🛫 Control Tower")
-
-    selected_airport = st.selectbox(
-        "Airport Hub",
-        options=["JFK - John F. Kennedy International", "ORD - Chicago O'Hare", "LAX - Los Angeles International"],
-        index=0,
-    )
-
-    selected_date = st.date_input(
-        "Operational Date",
-        value=date(2026, 10, 7),
-        min_value=date(2026, 1, 1),
-        max_value=date(2026, 12, 31),
-    )
-
-    st.markdown("---")
-    st.markdown("#### ⚙️ Data Ingestion")
-    flight_volume = st.slider("Simulated Flight Volume", min_value=20, max_value=80, value=40, step=5)
-
-    if st.button("📥 Ingest Flight & Weather Data", use_container_width=True, type="primary"):
-        with st.spinner(f"Ingesting flight & weather data for {selected_date}..."):
-            res = ingest_daily_data(selected_date, flight_count=flight_volume)
-            if res.get("success"):
-                st.success(f"Ingested {res.get('flights_ingested')} flights into `{res.get('backend')}`!")
-                st.rerun()
-            else:
-                st.error(f"Ingestion failed: {res.get('error')}")
-
-    st.markdown("---")
-    st.markdown("#### 🧠 Machine Learning Engine")
-    if st.button("🔄 Retrain XGBoost Model", use_container_width=True):
-        with st.spinner("Training XGBoost Delay Regressor on schedule & weather..."):
-            m = train_delay_model()
-            st.success(f"Model trained! Target R²: {m['target_accuracy_pct']}% | MAE: {m['mae_minutes']} min")
-            st.rerun()
-
-    st.markdown("---")
-    # Dual-Model Engine Selector
-    st.markdown("#### 🤖 AI Dispatcher Model")
-    selected_model_engine = st.selectbox(
-        "Optimization Model",
-        options=[
-            "Gemini 2.5 Flash (Cloud)",
-            "Custom Fine-Tuned Llama-3.2 (Local LoRA)",
-        ],
-        index=0,
-        help="Select between Google Gemini cloud engine or local fine-tuned LoRA model.",
-    )
-
-    user_gemini_key = ""
-    if "Gemini" in selected_model_engine:
-        user_gemini_key = st.text_input(
-            "Gemini API Key",
-            value=GOOGLE_API_KEY,
-            type="password",
-            help="Pre-configured from .env. If omitted, heuristic ATC rules are used.",
-        )
-    else:
-        lora_ready = (LORA_ADAPTER_DIR / "adapter_config.json").exists()
-        if lora_ready:
-            st.caption("🟢 **LoRA Adapter**: Ready in `./models/tothesky-llama-lora/`")
-        else:
-            st.caption("🟡 **LoRA Adapter**: Config not found. Use training hub below.")
-
-    # Model Fine-Tuning Controls in Sidebar Expander (Requirement 2)
-    with st.expander("🔬 Model Fine-Tuning & Training Hub", expanded=False):
-        st.markdown("##### 1. Big Data Ingestion (Kaggle)")
-        if st.button("📥 Fetch Big Data & Build SFT Dataset", use_container_width=True):
-            with st.spinner("Fetching flight dataset & building ChatML pairs..."):
-                download_and_extract_kaggle_data(raw_dir=RAW_DATA_DIR)
-                sft_res = prepare_sft_dataset(raw_dir=RAW_DATA_DIR, output_path=SFT_DATASET_PATH, num_samples=1000)
-                st.success(f"Ready: {sft_res['total_conversations']} ChatML pairs ({sft_res['file_size_mb']} MB)")
-                st.rerun()
-
-        st.markdown("##### 2. Google Gemini Online Tuning")
-        st.caption(f"Target: `models/gemini-1.5-flash-001-tuning`")
-        if st.button("☁️ Launch Gemini Cloud Tuning (1k pairs)", use_container_width=True):
-            with st.spinner("Submitting 1,000 pairs to Gemini tuning API..."):
-                t_res = start_gemini_tuning(api_key=user_gemini_key or GOOGLE_API_KEY, num_samples=1000, dry_run=False)
-                if t_res.get("success"):
-                    st.success(f"Tuning Job Started! Model: `{t_res.get('tuned_model_id')}`")
-                    st.rerun()
-                else:
-                    st.warning(f"Tuning notice: {t_res.get('error')}")
-
-        st.markdown("##### 3. Local LLaMA LoRA Training")
-        if st.button("💻 Run Local LoRA SFT (50 samples)", use_container_width=True):
-            with st.spinner("Running local LoRA fine-tuning..."):
-                ft_res = train_sft_model(max_samples=50, dry_run=True)
-                st.success(f"LoRA adapters configured in `{ft_res.get('output_dir')}`")
-                st.rerun()
-
-    # Telemetry Status
-    st.markdown("---")
-    st.markdown("#### 📡 System Status")
-    db_status = check_db_connection()
-    st.caption(
-        f"{'🟢' if db_status['connected'] else '🔴'} **Database**: "
-        f"`{db_status['backend'].upper() if db_status['connected'] else 'Error'}`"
-    )
-
-    model_ready = MODEL_PATH.exists()
-    st.caption(f"{'🟢' if model_ready else '🟡'} **ML Model**: `XGBoost` {'Ready' if model_ready else 'Not trained'}")
-
-    sft_data_ready = SFT_DATASET_PATH.exists()
-    st.caption(f"{'🟢' if sft_data_ready else '⚪'} **SFT Dataset**: {'1,000 pairs ready' if sft_data_ready else 'Not generated'}")
-
-    active_tuned_id = os.environ.get("TUNED_GEMINI_MODEL_ID") or TUNED_GEMINI_MODEL_ID
-    if active_tuned_id:
-        st.caption(f"🟢 **Tuned Gemini**: `{active_tuned_id.split('/')[-1]}`")
-    else:
-        st.caption("⚪ **Tuned Gemini**: `Not configured`")
-
-    lora_exists = (LORA_ADAPTER_DIR / "adapter_config.json").exists()
-    st.caption(f"{'🟢' if lora_exists else '⚪'} **Custom LoRA**: {'Trained' if lora_exists else 'Uninitialized'}")
-
-
-# -----------------------------------------------------------------------------
-# Main Header
+# App Header
 # -----------------------------------------------------------------------------
 st.markdown("<h1 class='main-title'>✈️ ToTheSky: Airport Monitoring & Scheduling</h1>", unsafe_allow_html=True)
-st.markdown(
-    f"<p class='sub-title'>Predictive Flight Delay Intelligence &amp; Multi-Architecture LLM Optimization &nbsp;·&nbsp; "
-    f"<b>Hub:</b> JFK International &nbsp;·&nbsp; <b>Date:</b> {selected_date.strftime('%B %d, %Y')} &nbsp;·&nbsp; "
-    f"<b>Engine:</b> <span style='color:#1E40AF; font-weight:600;'>{selected_model_engine}</span></p>",
-    unsafe_allow_html=True,
-)
-
-# Load day's data
-weather, raw_flights_df, opt_schedule_df = load_day_data(selected_date)
-
-# If no data exists for this date, provide an auto-ingest prompt
-if not weather or raw_flights_df.empty:
-    st.warning(f"⚠️ No flight operations or meteorological records found for **{selected_date.strftime('%B %d, %Y')}**.")
-    col_cta1, col_cta2 = st.columns([1, 2])
-    with col_cta1:
-        if st.button("🚀 Initialize Sample Operational Day", type="primary", use_container_width=True):
-            with st.spinner("Ingesting flight schedule and weather..."):
-                ingest_daily_data(selected_date, flight_count=40)
-                st.success("Data ready!")
-                st.rerun()
-    st.info("Tip: Click the button above or use the sidebar pipeline to ingest data.")
-    st.stop()
-
-# Run XGBoost inference on today's flights
-with st.spinner("Running XGBoost delay prediction pipeline..."):
-    enriched_flights_df = predict_flight_delays(raw_flights_df, weather)
-
-# Shared colour map
-color_map = {"Low": "#10B981", "Moderate": "#F59E0B", "High": "#EF4444"}
-
 
 # =============================================================================
-# TABBED INTERFACE (Requirement 2)
+# TABS
 # =============================================================================
 tab1, tab2, tab3 = st.tabs([
     "Data & Optimization",
@@ -305,7 +135,147 @@ tab1, tab2, tab3 = st.tabs([
 # TAB 1 — Data & Optimization
 # =============================================================================
 with tab1:
+
+    # -------------------------------------------------------------------------
+    # CONTROL SECTION (was sidebar)
+    # -------------------------------------------------------------------------
+    ctrl_row1_c1, ctrl_row1_c2, ctrl_row1_c3 = st.columns([2, 2, 2])
+
+    with ctrl_row1_c1:
+        selected_airport = st.selectbox(
+            "Airport Hub",
+            options=[
+                "JFK - John F. Kennedy International",
+                "ORD - Chicago O'Hare",
+                "LAX - Los Angeles International",
+            ],
+            index=0,
+        )
+
+    with ctrl_row1_c2:
+        selected_date = st.date_input(
+            "Operational Date",
+            value=date(2026, 10, 7),
+            min_value=date(2026, 1, 1),
+            max_value=date(2026, 12, 31),
+        )
+
+    with ctrl_row1_c3:
+        flight_volume = st.slider("Simulated Flight Volume", min_value=20, max_value=80, value=40, step=5)
+
+    ctrl_row2_c1, ctrl_row2_c2, ctrl_row2_c3 = st.columns([2, 2, 2])
+
+    with ctrl_row2_c1:
+        if st.button("📥 Ingest Flight & Weather Data", use_container_width=True, type="primary"):
+            with st.spinner(f"Ingesting flight & weather data for {selected_date}..."):
+                res = ingest_daily_data(selected_date, flight_count=flight_volume)
+                if res.get("success"):
+                    st.success(f"Ingested {res.get('flights_ingested')} flights into `{res.get('backend')}`!")
+                    st.rerun()
+                else:
+                    st.error(f"Ingestion failed: {res.get('error')}")
+
+    with ctrl_row2_c2:
+        if st.button("🔄 Retrain XGBoost Model", use_container_width=True):
+            with st.spinner("Training XGBoost Delay Regressor on schedule & weather..."):
+                m = train_delay_model()
+                st.success(f"Model trained! Target R²: {m['target_accuracy_pct']}% | MAE: {m['mae_minutes']} min")
+                st.rerun()
+
+    # Model & API Configuration expander
+    with st.expander("⚙️ Model & API Configuration", expanded=False):
+        cfg_c1, cfg_c2 = st.columns(2)
+
+        with cfg_c1:
+            selected_model_engine = st.selectbox(
+                "AI Dispatcher Model Engine",
+                options=[
+                    "Gemini 2.5 Flash (Cloud)",
+                    "Custom Fine-Tuned Llama-3.2 (Local LoRA)",
+                ],
+                index=0,
+                help="Select between Google Gemini cloud engine or local fine-tuned LoRA model.",
+            )
+
+        with cfg_c2:
+            if "Gemini" in selected_model_engine:
+                user_gemini_key = st.text_input(
+                    "Gemini API Key",
+                    value=GOOGLE_API_KEY,
+                    type="password",
+                    help="Pre-configured from .env. If omitted, heuristic ATC rules are used.",
+                )
+            else:
+                user_gemini_key = GOOGLE_API_KEY
+                lora_ready = (LORA_ADAPTER_DIR / "adapter_config.json").exists()
+                st.caption(
+                    f"{'🟢 **LoRA Adapter**: Ready' if lora_ready else '🟡 **LoRA Adapter**: Not found — use training hub below.'}"
+                )
+
+        st.markdown("##### Model Fine-Tuning & Training Hub")
+        ft_c1, ft_c2, ft_c3 = st.columns(3)
+
+        with ft_c1:
+            st.caption("**1. Big Data Ingestion (Kaggle)**")
+            if st.button("📥 Fetch Big Data & Build SFT Dataset", use_container_width=True):
+                with st.spinner("Fetching flight dataset & building ChatML pairs..."):
+                    download_and_extract_kaggle_data(raw_dir=RAW_DATA_DIR)
+                    sft_res = prepare_sft_dataset(raw_dir=RAW_DATA_DIR, output_path=SFT_DATASET_PATH, num_samples=1000)
+                    st.success(f"Ready: {sft_res['total_conversations']} ChatML pairs ({sft_res['file_size_mb']} MB)")
+                    st.rerun()
+
+        with ft_c2:
+            st.caption("**2. Google Gemini Online Tuning**")
+            if st.button("☁️ Launch Gemini Cloud Tuning (1k pairs)", use_container_width=True):
+                with st.spinner("Submitting 1,000 pairs to Gemini tuning API..."):
+                    t_res = start_gemini_tuning(api_key=user_gemini_key or GOOGLE_API_KEY, num_samples=1000, dry_run=False)
+                    if t_res.get("success"):
+                        st.success(f"Tuning Job Started! Model: `{t_res.get('tuned_model_id')}`")
+                        st.rerun()
+                    else:
+                        st.warning(f"Tuning notice: {t_res.get('error')}")
+
+        with ft_c3:
+            st.caption("**3. Local LLaMA LoRA Training**")
+            if st.button("💻 Run Local LoRA SFT (50 samples)", use_container_width=True):
+                with st.spinner("Running local LoRA fine-tuning..."):
+                    ft_res = train_sft_model(max_samples=50, dry_run=True)
+                    st.success(f"LoRA adapters configured in `{ft_res.get('output_dir')}`")
+                    st.rerun()
+
+    st.markdown("---")
+
+    # -------------------------------------------------------------------------
+    # Load data AFTER controls are defined
+    # -------------------------------------------------------------------------
+    st.markdown(
+        f"<p class='sub-title'><b>Hub:</b> {selected_airport} &nbsp;·&nbsp; "
+        f"<b>Date:</b> {selected_date.strftime('%B %d, %Y')} &nbsp;·&nbsp; "
+        f"<b>Engine:</b> <span style='color:#1E40AF; font-weight:600;'>{selected_model_engine}</span></p>",
+        unsafe_allow_html=True,
+    )
+
+    weather, raw_flights_df, opt_schedule_df = load_day_data(selected_date)
+
+    if not weather or raw_flights_df.empty:
+        st.warning(f"⚠️ No flight operations or meteorological records found for **{selected_date.strftime('%B %d, %Y')}**.")
+        col_cta1, col_cta2 = st.columns([1, 2])
+        with col_cta1:
+            if st.button("🚀 Initialize Sample Operational Day", type="primary", use_container_width=True):
+                with st.spinner("Ingesting flight schedule and weather..."):
+                    ingest_daily_data(selected_date, flight_count=40)
+                    st.success("Data ready!")
+                    st.rerun()
+        st.stop()
+
+    with st.spinner("Running XGBoost delay prediction pipeline..."):
+        enriched_flights_df = predict_flight_delays(raw_flights_df, weather)
+
+    color_map = {"Low": "#10B981", "Moderate": "#F59E0B", "High": "#EF4444"}
+
+    # -------------------------------------------------------------------------
     # Weather KPIs
+    # -------------------------------------------------------------------------
     st.markdown("### 🌤️ Today's Meteorological Conditions")
 
     w_col1, w_col2, w_col3, w_col4, w_col5, w_col6 = st.columns(6)
@@ -323,21 +293,22 @@ with tab1:
         delta_color="inverse",
     )
 
-    # Weather condition advisory banner
     cond = weather.get("weather_condition", "Clear")
     wind_val = weather.get("wind_speed_kmh", 0.0)
     precip_val = weather.get("precipitation_mm", 0.0)
 
     if "Thunderstorm" in cond or wind_val > 40.0:
-        st.error(f"⛈️ **Hazardous Weather Advisory**: `{cond}` in effect. Surface winds at {wind_val} km/h, precipitation {precip_val} mm. Ground holds and spacing restrictions active across all runways.")
+        st.error(f"⛈️ **Hazardous Weather Advisory**: `{cond}` in effect. Surface winds at {wind_val} km/h, precipitation {precip_val} mm. Ground holds active.")
     elif "Rain" in cond or wind_val > 25.0:
         st.warning(f"🌧️ **Moderate Meteorological Advisory**: `{cond}` detected. Runway friction reduced; expect minor departure spacing buffers.")
     else:
-        st.success(f"☀️ **Nominal Meteorological Conditions**: `{cond}`. Visual Flight Rules (VFR) in effect. Runways operating at optimal capacity.")
+        st.success(f"☀️ **Nominal Conditions**: `{cond}`. VFR in effect — runways at optimal capacity.")
 
     st.markdown("---")
 
-    # Raw Flights DataFrame Display with filtering
+    # -------------------------------------------------------------------------
+    # Raw Flight Schedule
+    # -------------------------------------------------------------------------
     st.markdown("### 🛫 Raw Flight Schedule")
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
@@ -385,7 +356,9 @@ with tab1:
 
     st.markdown("---")
 
-    # AI Schedule Optimization Trigger
+    # -------------------------------------------------------------------------
+    # AI Schedule Optimization
+    # -------------------------------------------------------------------------
     st.markdown("### 🤖 AI Schedule Optimization")
     col_btn, col_engine_info = st.columns([1, 2])
     with col_btn:
@@ -404,15 +377,13 @@ with tab1:
             if llm_res.get("success"):
                 save_optimized_schedule_to_db(llm_res.get("records", []), selected_date)
                 st.session_state["opt_source"] = llm_res.get("source", selected_model_engine)
-                st.success(f"Optimized timetable created successfully via **{llm_res.get('source')}**!")
+                st.success(f"Optimized timetable created via **{llm_res.get('source')}**!")
                 st.rerun()
 
-    # Master Optimized Timetable
     opt_schedule_records = get_optimized_schedule_for_date(selected_date)
     opt_df = pd.DataFrame(opt_schedule_records)
 
     if not opt_df.empty:
-        # Impact metrics
         avg_adj = round(float(opt_df["delay_adjustment_min"].mean()), 1)
         flights_moved = len(opt_df[opt_df["delay_adjustment_min"] > 0])
 
@@ -448,7 +419,6 @@ with tab1:
             height=320,
         )
 
-        # CSV Export
         csv_data = opt_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="📥 Download AI-Optimized Timetable (CSV)",
@@ -461,9 +431,18 @@ with tab1:
 
 
 # =============================================================================
-# TAB 2 — Analytics & AI Reasoning
+# TAB 2 — Analytics & AI Reasoning  (UNCHANGED)
 # =============================================================================
 with tab2:
+    # Load data within this tab (weather/enriched_flights may not be defined if tab1 was short-circuited via st.stop)
+    try:
+        _weather = weather
+        _enriched = enriched_flights_df
+        _color_map = color_map
+    except NameError:
+        st.info("Navigate to **Data & Optimization** tab first to load the day's data.")
+        st.stop()
+
     st.markdown("### 🧠 XGBoost Model Performance")
 
     model_metrics = get_model_metrics()
@@ -471,7 +450,7 @@ with tab2:
     m_c1.metric("Target Model Accuracy (R²)", f"{model_metrics.get('target_accuracy_pct', 99.1)}%", "Target: 91%+")
     m_c2.metric("Mean Absolute Error (MAE)", f"{model_metrics.get('mae_minutes', 2.74)} min", "Tight Error Margin")
     m_c3.metric("Tolerance (±10 min)", f"{model_metrics.get('within_10min_accuracy_pct', 99.1)}%", "High Confidence")
-    m_c4.metric("Risk Distribution", f"{len(enriched_flights_df[enriched_flights_df['risk_level'] == 'High'])} High Risk", "Requires Rescheduling")
+    m_c4.metric("Risk Distribution", f"{len(_enriched[_enriched['risk_level'] == 'High'])} High Risk", "Requires Rescheduling")
 
     st.markdown("---")
 
@@ -479,7 +458,7 @@ with tab2:
 
     with chart_row1_col1:
         st.markdown("#### ⏱️ Predicted Delay Duration Across Operational Timeline")
-        scatter_df = enriched_flights_df.copy()
+        scatter_df = _enriched.copy()
         scatter_df["time_str"] = pd.to_datetime(scatter_df["scheduled_departure"]).dt.strftime("%H:%M")
 
         fig_scatter = px.scatter(
@@ -488,7 +467,7 @@ with tab2:
             y="predicted_delay_min",
             color="risk_level",
             size="predicted_delay_min",
-            color_discrete_map=color_map,
+            color_discrete_map=_color_map,
             hover_data=["flight_number", "airline", "destination", "assigned_runway"],
             labels={"time_str": "Scheduled Departure (Time)", "predicted_delay_min": "Predicted Delay (Minutes)", "risk_level": "Risk"},
             title="Flight Delay Duration Distribution (XGBoost Regression)",
@@ -498,7 +477,7 @@ with tab2:
 
     with chart_row1_col2:
         st.markdown("#### 🎯 Delay Risk Severity Breakdown")
-        risk_counts = enriched_flights_df["risk_level"].value_counts().reset_index()
+        risk_counts = _enriched["risk_level"].value_counts().reset_index()
         risk_counts.columns = ["risk_level", "count"]
 
         fig_pie = px.pie(
@@ -506,7 +485,7 @@ with tab2:
             values="count",
             names="risk_level",
             color="risk_level",
-            color_discrete_map=color_map,
+            color_discrete_map=_color_map,
             hole=0.45,
             title="Proportion of Flight Operations by Risk Category",
         )
@@ -517,8 +496,8 @@ with tab2:
 
     with chart_row2_col1:
         st.markdown("#### 🛫 Runway Congestion vs. Peak Capacity")
-        enriched_flights_df["dep_hour"] = pd.to_datetime(enriched_flights_df["scheduled_departure"]).dt.hour
-        hourly_df = enriched_flights_df.groupby("dep_hour")["flight_number"].count().reset_index()
+        _enriched["dep_hour"] = pd.to_datetime(_enriched["scheduled_departure"]).dt.hour
+        hourly_df = _enriched.groupby("dep_hour")["flight_number"].count().reset_index()
         hourly_df.columns = ["hour", "flight_count"]
         hourly_df["hour_label"] = hourly_df["hour"].apply(lambda h: f"{h:02d}:00")
 
@@ -569,7 +548,6 @@ with tab2:
 
     st.markdown("---")
 
-    # Expandable Flight-by-Flight AI Dispatch Decisions & Rationales
     st.markdown("### 🔍 Flight-by-Flight AI Dispatch Decisions & Rationales")
 
     opt_schedule_records_t2 = get_optimized_schedule_for_date(selected_date)
@@ -609,14 +587,18 @@ with tab2:
 
 
 # =============================================================================
-# TAB 3 — RAG vs. Fine-Tuned Comparison (Requirement 3)
+# TAB 3 — RAG vs. Fine-Tuned Comparison (streamlined)
 # =============================================================================
 with tab3:
-    st.markdown("### ⚖️ Architectural Head-to-Head: RAG vs. Fine-Tuned LLM")
-    st.caption(
-        "Compare prompt-augmented Retrieval-Augmented Generation (Base Gemini + elaborate in-context rules) "
-        "against direct inference with the Fine-Tuned Model (trained on Kaggle flight dispatch patterns)."
-    )
+    try:
+        _weather3 = weather
+        _enriched3 = enriched_flights_df
+        _user_key3 = user_gemini_key
+    except NameError:
+        st.info("Navigate to **Data & Optimization** tab first to load the day's data.")
+        st.stop()
+
+    st.markdown("### ⚖️ RAG vs. Fine-Tuned: Head-to-Head Comparison")
 
     # Configuration row
     comp_ctrl1, comp_ctrl2, comp_ctrl3 = st.columns([2, 2, 1])
@@ -633,17 +615,15 @@ with tab3:
         st.write("")
         run_comp_btn = st.button("⚡ Run Head-to-Head Comparison", type="primary", use_container_width=True)
 
-    # Select batch of flights for comparison
-    flights_sample = enriched_flights_df.head(test_flight_count).to_dict(orient="records")
+    flights_sample = _enriched3.head(test_flight_count).to_dict(orient="records")
 
-    # Trigger or load comparison
     if run_comp_btn or "comp_results" not in st.session_state:
         with st.spinner("Executing simultaneous inference across both RAG and Fine-Tuned pipelines..."):
             comp_res = compare_rag_vs_finetuned(
                 flights_batch=flights_sample,
-                weather_dict=weather,
+                weather_dict=_weather3,
                 tuned_model_id=tuned_model_input,
-                api_key=user_gemini_key or GOOGLE_API_KEY,
+                api_key=_user_key3 or GOOGLE_API_KEY,
             )
             st.session_state["comp_results"] = comp_res
 
@@ -651,7 +631,7 @@ with tab3:
     rag_data = comp_data["rag"]
     ft_data = comp_data["finetuned"]
 
-    # Top Architectural KPI Scorecard
+    # KPI Scorecard
     st.markdown("---")
     sc1, sc2, sc3, sc4 = st.columns(4)
     sc1.metric(
@@ -681,19 +661,12 @@ with tab3:
 
     st.markdown("---")
 
-    # Side-by-side columns (Requirement 3)
+    # Side-by-side output columns
     col1, col2 = st.columns(2)
 
-    # COLUMN 1: RAG Engine
     with col1:
-        st.markdown("#### 1️⃣ RAG Engine (Base Gemini + In-Context Prompting)")
-        st.caption(f"**Model**: `{rag_data['engine']}`")
-        st.caption(f"**Input Size**: `{rag_data['prompt_tokens']} tokens` &nbsp;|&nbsp; **Latency**: `{rag_data['latency_sec']}s`")
-
-        with st.expander("📝 View Augmented RAG Prompt (~1,200 tokens)", expanded=False):
-            st.code(rag_data["input_prompt"][:1200] + "\n...", language="markdown")
-
-        st.markdown("**Generated Timetable & Rationale:**")
+        st.markdown("#### 1️⃣ RAG Engine")
+        st.caption(f"**Model**: `{rag_data['engine']}` &nbsp;|&nbsp; **Tokens**: `{rag_data['prompt_tokens']}` &nbsp;|&nbsp; **Latency**: `{rag_data['latency_sec']}s`")
         rag_df = pd.DataFrame(rag_data["records"])
         st.dataframe(
             rag_df.rename(columns={
@@ -708,21 +681,9 @@ with tab3:
             height=240,
         )
 
-        st.info(
-            "**RAG Phrasing Characteristic**:\n"
-            "Explanatory, formal, and verbose. Adheres strictly to the guidelines and persona provided in the input prompt."
-        )
-
-    # COLUMN 2: Fine-Tuned Engine
     with col2:
-        st.markdown("#### 2️⃣ Fine-Tuned Engine (Learned Dispatch Weights)")
-        st.caption(f"**Model**: {ft_data['engine']}")
-        st.caption(f"**Input Size**: `{ft_data['prompt_tokens']} tokens` &nbsp;|&nbsp; **Latency**: `{ft_data['latency_sec']}s`")
-
-        with st.expander("📝 View Minimal Raw Input (~160 tokens — No Instructions)", expanded=False):
-            st.code(ft_data["input_prompt"], language="text")
-
-        st.markdown("**Generated Timetable & Rationale:**")
+        st.markdown("#### 2️⃣ Fine-Tuned Engine")
+        st.caption(f"**Model**: `{ft_data['engine']}` &nbsp;|&nbsp; **Tokens**: `{ft_data['prompt_tokens']}` &nbsp;|&nbsp; **Latency**: `{ft_data['latency_sec']}s`")
         ft_df = pd.DataFrame(ft_data["records"])
         st.dataframe(
             ft_df.rename(columns={
@@ -737,12 +698,6 @@ with tab3:
             height=240,
         )
 
-        st.success(
-            "**Fine-Tuned Phrasing Characteristic**:\n"
-            "Domain-specific, direct ATC dispatch jargon. Inherent output structure learned directly from Kaggle Big Data fine-tuning."
-        )
-
-    # Detailed Rationale Phrasing Comparison
     st.markdown("---")
     st.markdown("#### 🔍 Flight-by-Flight Rationale Phrasing Comparison")
 
@@ -751,39 +706,18 @@ with tab3:
         f_rec = ft_data["records"][i]
         f_num = r_rec["flight_number"]
 
-        with st.expander(f"✈️ **Flight {f_num}**: RAG vs. Fine-Tuned Rationale Breakdown", expanded=(i == 0)):
+        with st.expander(f"✈️ **Flight {f_num}**: RAG vs. Fine-Tuned Rationale", expanded=(i == 0)):
             r_c1, r_c2 = st.columns(2)
             with r_c1:
-                st.markdown("**RAG Engine Output:**")
-                st.info(f"📘 **Departure**: `{r_rec['orig_time']} ➔ {r_rec['opt_time']} ({r_rec['adjustment']})` via `{r_rec['runway']}`\n\n_{r_rec['reasoning']}_")
+                st.markdown("**RAG Engine:**")
+                st.info(f"📘 `{r_rec['orig_time']} ➔ {r_rec['opt_time']} ({r_rec['adjustment']})` via `{r_rec['runway']}`\n\n_{r_rec['reasoning']}_")
             with r_c2:
-                st.markdown("**Fine-Tuned Engine Output:**")
-                st.success(f"⚡ **Departure**: `{f_rec['orig_time']} ➔ {f_rec['opt_time']} ({f_rec['adjustment']})` via `{f_rec['runway']}`\n\n_{f_rec['reasoning']}_")
-
-    # Architectural Trade-off Summary
-    st.markdown("---")
-    st.markdown("#### 💡 Architectural Analysis: When to Use RAG vs. Fine-Tuned")
-    th1, th2 = st.columns(2)
-    with th1:
-        st.markdown(
-            "**When to use RAG (Prompt-Augmentation):**\n"
-            "- Rapid prototyping and zero upfront training cost.\n"
-            "- Rapidly changing FAA/ATC operational policies that change day-to-day.\n"
-            "- Broad general reasoning capabilities.\n"
-            "- Trade-off: Higher token consumption and susceptibility to prompt drift."
-        )
-    with th2:
-        st.markdown(
-            "**When to use Fine-Tuned LLMs (Domain Adaptation):**\n"
-            "- High-throughput production deployments (>80% token cost reduction).\n"
-            "- Lower latency requirements (<500ms dispatch decisions).\n"
-            "- Strict adherence to specialized operational formats without large prompt injections.\n"
-            "- Domain-specialized vocabulary and consistent phrasing."
-        )
+                st.markdown("**Fine-Tuned Engine:**")
+                st.success(f"⚡ `{f_rec['orig_time']} ➔ {f_rec['opt_time']} ({f_rec['adjustment']})` via `{f_rec['runway']}`\n\n_{f_rec['reasoning']}_")
 
 
 # -----------------------------------------------------------------------------
 # Footer
 # -----------------------------------------------------------------------------
 st.markdown("---")
-st.caption("ToTheSky · Airport Monitoring & Predictive Flight Scheduling Dashboard · Powered by XGBoost, Google Gemini & Fine-Tuned LLaMA-3.2 LoRA")
+st.caption("ToTheSky · Airport Monitoring & Predictive Flight Scheduling · Powered by XGBoost, Google Gemini & Fine-Tuned LLaMA-3.2 LoRA")

@@ -159,7 +159,7 @@ def train_delay_model(n_samples: int = 6000, save_path: Path = MODEL_PATH) -> Di
     mae = float(mean_absolute_error(y_test, preds))
     rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
 
-    # University Presentation Accuracy metric: within 10-minute tolerance
+    
     within_10m = float(np.mean(np.abs(y_test - preds) <= 10.0) * 100.0)
     within_5m = float(np.mean(np.abs(y_test - preds) <= 5.0) * 100.0)
 
